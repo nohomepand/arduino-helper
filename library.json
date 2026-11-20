@@ -1,0 +1,15 @@
+{
+  "name": "arduino-helper",
+  "keywords": "rtos, thread, cli",
+  "description": "A simple libraries for embedded C++.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nohomepand/arduino-helper.git"
+  },
+  "version": "0.1.0",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "libArchive": false
+  }
+}
