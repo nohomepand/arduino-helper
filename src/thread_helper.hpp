@@ -126,7 +126,7 @@ public:
      * @param stackSize FreeRTOSタスクスタックサイズ。ESP32 Arduinoではバイト単位。
      * @param priority FreeRTOSタスク優先度。
      */
-    Task(const char* name, uint32_t stackSize = 4096, UBaseType_t priority = 1, bool daemon = false)
+    Task(const char* name, uint32_t stackSize = 4096, UBaseType_t priority = 1)
         : name_(name), stackSize_(stackSize), priority_(priority) {}
 
     virtual ~Task() {
