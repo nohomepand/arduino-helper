@@ -123,8 +123,6 @@ public:
             other.value_ = nullptr;
             other.locked_ = false;
         }
-            other.locked_ = false;
-        }
 
         /**
          * @brief mutexを取得できたかを返す。
