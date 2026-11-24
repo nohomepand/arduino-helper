@@ -5,6 +5,7 @@
 #include <freertos/semphr.h>
 #include <stdint.h>
 #include <functional>
+#include <utility>
 
 namespace rtos {
 
@@ -67,6 +68,141 @@ public:
 private:
     Mutex& mutex_;
     bool locked_ = false;
+};
+
+/**
+ * @brief 値とmutexをまとめ、スレッドセーフにアクセスするためのコンテナ。
+ *
+ * lock()で取得したGuardedが生存している間、保持する値へのアクセスを排他します。
+ * GuardedのisLocked()を確認してから値にアクセスしてください。
+ *
+ * @tparam T 保持する値の型。
+ */
+template<typename T>
+class SharedObject {
+public:
+    /**
+     * @brief 値へのアクセス権とmutexロックを保持するRAIIガード。
+     *
+     * コピーはできません。移動構築するとロックの解放責任も移動します。
+     */
+    class Guarded {
+    public:
+        /**
+         * @brief mutexを取得し、指定された値を保護するガードを作る。
+         * @param mutex 保護に使うmutex。
+         * @param value 保護対象の値。
+         * @param timeoutMs mutex取得を待つ時間（ミリ秒）。portMAX_DELAYは無期限。
+         */
+        Guarded(Mutex& mutex, T& value, uint32_t timeoutMs)
+            : mutex_(&mutex), value_(&value), locked_(mutex.lock(timeoutMs)) {}
+
+        /** @brief ロックを取得済みの場合、mutexを解放する。 */
+        ~Guarded() {
+            unlock();
+        }
+
+        /** @brief ガードのコピー構築を禁止する。 */
+        Guarded(const Guarded&) = delete;
+
+        /** @brief ガードのコピー代入を禁止する。 */
+        Guarded& operator=(const Guarded&) = delete;
+
+        // Move assignment is explicitly deleted to prevent accidental resource transfer after construction.
+        // Only move construction is allowed for Guarded.
+        /** @brief ガードのムーブ代入を禁止する。 */
+        Guarded& operator=(Guarded&&) = delete;
+
+        /**
+         * @brief ロックの解放責任を移動する。
+         * @param other 移動元。移動後はロックを解放しない。
+         */
+        Guarded(Guarded&& other) noexcept
+            : mutex_(other.mutex_), value_(other.value_), locked_(other.locked_) {
+            other.mutex_ = nullptr;
+            other.value_ = nullptr;
+            other.locked_ = false;
+        }
+            other.locked_ = false;
+        }
+
+        /**
+         * @brief mutexを取得できたかを返す。
+         * @return 取得できた場合はtrue。
+         */
+        bool isLocked() const { return locked_; }
+
+        /**
+         * @brief 保護対象のメンバーにポインター形式でアクセスする。
+         * @return 保護対象へのポインター。アクセス前にisLocked()を確認すること。
+         */
+        T* operator->() const { return value_; }
+
+        /**
+         * @brief 保護対象に参照形式でアクセスする。
+         * @return 保護対象への参照。アクセス前にisLocked()を確認すること。
+         */
+        T& operator*() const { return *value_; }
+
+        /**
+         * @brief 保護対象への参照に暗黙変換する。
+         * @return 保護対象への参照。アクセス前にisLocked()を確認すること。
+         */
+        operator T&() const { return *value_; }
+
+        /**
+         * @brief 保護対象への参照を取得する。
+         * @return 保護対象への参照。アクセス前にisLocked()を確認すること。
+         */
+        T& get() const { return *value_; }
+
+    private:
+        /** 取得済みの場合だけmutexを解放する。 */
+        void unlock() {
+            if (locked_ && mutex_ != nullptr) {
+                mutex_->unlock();
+                locked_ = false;
+            }
+        }
+
+        /** ロックの取得・解放に使うmutex。 */
+        Mutex* mutex_;
+
+        /** ロックで保護される値。 */
+        T* value_;
+
+        /** このガードがロックを所有しているか。 */
+        bool locked_;
+    };
+
+    /** @brief Tをデフォルト初期化したSharedObjectを作る。 */
+    SharedObject() : mutex_(), value_() {}
+
+    /**
+     * @brief 指定した値のコピーを保持するSharedObjectを作る。
+     * @param value 初期値。
+     */
+    explicit SharedObject(const T& value) : mutex_(), value_(value) {}
+
+    /**
+     * @brief 指定した値をムーブして保持するSharedObjectを作る。
+     * @param value 初期値。ムーブ後の状態は未規定。
+     */
+    explicit SharedObject(T&& value) : mutex_(), value_(std::move(value)) {}
+
+    /**
+     * @brief 値への排他アクセス用ガードを取得する。
+     * @param timeoutMs mutex取得を待つ時間（ミリ秒）。既定値portMAX_DELAYは無期限。
+     * @return mutexのロックを保持するGuarded。取得失敗時はisLocked()がfalse。
+     */
+    [[nodiscard]]
+    Guarded lock(uint32_t timeoutMs = portMAX_DELAY) {
+        return Guarded(mutex_, value_, timeoutMs);
+    }
+
+private:
+    Mutex mutex_;
+    T value_;
 };
 
 /**

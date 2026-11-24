@@ -73,6 +73,25 @@ public:
         _stream->printf("Unknown command [%s] args=[%s]\n", command.c_str(), args.c_str());
     }
 
+    void feed(const String& line) {
+        String command, args;
+        int spaceIndex = line.indexOf(' ');
+        if (spaceIndex == -1) {
+            command = line;
+            args = "";
+        } else {
+            command = line.substring(0, spaceIndex);
+            args = line.substring(spaceIndex + 1);
+        }
+
+        auto found = _handler_map.find(command);
+        if (found != _handler_map.end()) {
+            found->second.first(args);
+        } else {
+            unhandledCommand(command, args);
+        }
+    }
+
     /**
      * 利用可能な入力を読み取り、改行でコマンドを実行する。
      * Arduinoのloop()などから繰り返し呼び出す。
@@ -107,22 +126,7 @@ public:
                     String tmp((const char*)_buffer.data());
                     _buffer.clear();
 
-                    String command, args;
-                    int spaceIndex = tmp.indexOf(' ');
-                    if (spaceIndex == -1) {
-                        command = tmp;
-                        args = "";
-                    } else {
-                        command = tmp.substring(0, spaceIndex);
-                        args = tmp.substring(spaceIndex + 1);
-                    }
-
-                    auto found = _handler_map.find(command);
-                    if (found != _handler_map.end()) {
-                        found->second.first(args);
-                    } else {
-                        unhandledCommand(command, args);
-                    }
+                    feed(tmp);
                 }
 
                 if (_prompt.length() > 0)

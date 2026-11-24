@@ -3,6 +3,7 @@
 `thread_helper.hpp`は、FreeRTOSのmutexとtaskをC++クラスから使うための補助クラスを`rtos`名前空間に提供します。
 
 - `rtos::Mutex` / `rtos::LockGuard`: タスク間で共有するデータの排他制御
+- `rtos::SharedObject<T>`: 値とmutexをまとめ、RAIIガード経由でデータにアクセス
 - `rtos::MutexEchange<T>`: 値を1つだけ保持する、上書き可能なメールボックス
 - `rtos::Task`: 派生クラスの`run()`をFreeRTOSタスクとして実行
 
@@ -98,6 +99,52 @@ void updateSharedValue() {
 - `Mutex::unlock()`はロックを取得したタスクから呼び出してください。通常は`LockGuard`を使うと、スコープ終了時に解放できます。
 - 有限のタイムアウトを指定した場合は、`LockGuard::isLocked()`を確認してください。
 - mutexはFreeRTOSの通常タスクから使うもので、ISRからは使用できません。
+
+## SharedObject
+
+```cpp
+#include <vector>
+
+rtos::SharedObject<std::vector<int>> sharedValues;
+
+void addValue() {
+  auto values = sharedValues.lock();
+  if (values.isLocked()) {
+    values->push_back(1);
+  }
+} // ガードの破棄時にmutexを解放
+
+void takeValue() {
+  int value;
+  bool taken = false;
+  {
+    auto values = sharedValues.lock();
+    if (values.isLocked() && !values->empty()) {
+      value = values->front();
+      values->pop_back();
+      taken = true;
+    }
+  }
+  if (taken) {
+    Serial.printf("take %d\n", value);
+  }
+}
+```
+
+`SharedObject<T>`は`T`をデフォルト初期化するか、初期値をコピーまたはムーブして構築します。`lock(timeoutMs)`はロックを保持する`Guarded`を返し、ガードのスコープ終了時にロックを解放します。`timeoutMs`はミリ秒単位で、既定値`portMAX_DELAY`は無期限に待ちます。ロック取得に失敗した場合は`isLocked()`が`false`になるため、値にはアクセスしないでください。
+
+`Guarded`はコピーできず、ムーブ構築のみ可能です。値には`operator->()`、`operator*()`、`get()`、または`T&`への暗黙変換でアクセスできます。`->`は値のメンバー関数を呼び出す場合に便利です。
+
+| メンバー | 説明 |
+| --- | --- |
+| `SharedObject()` | `T`をデフォルト初期化する。 |
+| `SharedObject(const T&)` | 初期値をコピーして保持する。 |
+| `SharedObject(T&&)` | 初期値をムーブして保持する。 |
+| `lock(timeoutMs)` | 指定時間mutexを待ち、アクセス用`Guarded`を返す。 |
+| `Guarded::isLocked()` | ロック取得成否を返す。 |
+| `Guarded::operator->()` / `operator*()` / `get()` | 保護対象の値にポインターまたは参照でアクセスする。 |
+| `Guarded::operator T&()` | 保護対象の値への参照に暗黙変換する。 |
+| `Guarded`のデストラクター | 取得済みのロックを解放する。 |
 
 ## MutexEchangeの使用例
 

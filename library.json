@@ -6,9 +6,9 @@
     "type": "git",
     "url": "https://github.com/nohomepand/arduino-helper.git"
   },
-  "version": "0.1.0",
-  "frameworks": "*",
-  "platforms": "*",
+  "version": "0.1.1",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
   "build": {
     "libArchive": false
   }
