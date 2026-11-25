@@ -129,11 +129,24 @@ void takeValue() {
     Serial.printf("take %d\n", value);
   }
 }
+
+void useSnapshot() {
+  std::vector<int> snapshot;
+  {
+    auto values = sharedValues.lock();
+    if (!values.get(snapshot)) {
+      return; // ロック失敗。snapshotは変更されない
+    }
+  } // コピー後にロックを解放
+
+  Serial.printf("snapshot size: %u\n",
+                static_cast<unsigned>(snapshot.size()));
+}
 ```
 
 `SharedObject<T>`は`T`をデフォルト初期化するか、初期値をコピーまたはムーブして構築します。`lock(timeoutMs)`はロックを保持する`Guarded`を返し、ガードのスコープ終了時にロックを解放します。`timeoutMs`はミリ秒単位で、既定値`portMAX_DELAY`は無期限に待ちます。ロック取得に失敗した場合は`isLocked()`が`false`になるため、値にはアクセスしないでください。
 
-`Guarded`はコピーできず、ムーブ構築のみ可能です。値には`operator->()`、`operator*()`、`get()`、または`T&`への暗黙変換でアクセスできます。`->`は値のメンバー関数を呼び出す場合に便利です。
+`Guarded`はコピーできず、ムーブ構築のみ可能です。値には`operator->()`、`operator*()`、または`T&`への暗黙変換でアクセスできます。`->`は値のメンバー関数を呼び出す場合に便利です。`get(out)`はロック中に保持値を`out`へコピーし、コピーできた場合に`true`を返します。ロック取得に失敗した場合は`false`を返し、`out`は変更しません。コピー後すぐロックを解放して値を使いたい場合に便利です。
 
 | メンバー | 説明 |
 | --- | --- |
@@ -142,7 +155,8 @@ void takeValue() {
 | `SharedObject(T&&)` | 初期値をムーブして保持する。 |
 | `lock(timeoutMs)` | 指定時間mutexを待ち、アクセス用`Guarded`を返す。 |
 | `Guarded::isLocked()` | ロック取得成否を返す。 |
-| `Guarded::operator->()` / `operator*()` / `get()` | 保護対象の値にポインターまたは参照でアクセスする。 |
+| `Guarded::operator->()` / `operator*()` | 保護対象の値にポインターまたは参照でアクセスする。 |
+| `Guarded::get(T& out)` | 保持値を`out`へコピーし、成功時はtrueを返す。失敗時は`out`を変更しない。 |
 | `Guarded::operator T&()` | 保護対象の値への参照に暗黙変換する。 |
 | `Guarded`のデストラクター | 取得済みのロックを解放する。 |
 

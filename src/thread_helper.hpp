@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <functional>
 #include <utility>
+#include <memory>
 
 namespace rtos {
 
@@ -142,17 +143,19 @@ public:
          */
         T& operator*() const { return *value_; }
 
-        /**
-         * @brief 保護対象への参照に暗黙変換する。
-         * @return 保護対象への参照。アクセス前にisLocked()を確認すること。
-         */
-        operator T&() const { return *value_; }
+        inline operator bool() const { return locked_; }
 
         /**
-         * @brief 保護対象への参照を取得する。
-         * @return 保護対象への参照。アクセス前にisLocked()を確認すること。
+         * @brief 保護対象の値を出力先へコピーする。
+         * @param out コピー先。ロック取得に失敗した場合は変更しない。
+         * @return 値をコピーできた場合はtrue。
          */
-        T& get() const { return *value_; }
+        bool get(T& out) const {
+            if (locked_) {
+                out = *value_;
+            }
+            return locked_;
+        }
 
     private:
         /** 取得済みの場合だけmutexを解放する。 */
@@ -232,9 +235,9 @@ public:
     }
 
     /** 保留中の値をresultに取り出し、保留状態を解除する。 */
-    bool take(T& result) {
+    bool get(T& result) {
         LockGuard guard(mutex_);
-        if (set_) {
+        if (set_ && guard.isLocked()) {
             result = value_;
             set_ = false;
             return true;
@@ -343,9 +346,11 @@ private:
  * 関数 runnerを本体として新たなスレッドを開始する。
  * Taskオブジェクトをタスクの実行中ずっと有効に保つこと。
  */
-SimpleTask run(const char* name, std::function<void()> runner) {
-    SimpleTask task(name, runner);
-    task.start();
+inline std::unique_ptr<SimpleTask> run(const char* name, std::function<void()> runner) {
+    std::unique_ptr<SimpleTask> task(new SimpleTask(name, std::move(runner)));
+    if (!task->start()) {
+        return nullptr;
+    }
     return task;
 }
 
