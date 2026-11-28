@@ -91,3 +91,10 @@ public:
 
 /** NvsPropertyメンバーを宣言する。init()は別途呼び出すこと。 */
 #define DEFINE_NVS_PROP(Type, Name) NvsProperty<Type> Name
+
+static void clearPreference(const char* ns) {
+    Preferences prefs;
+    prefs.begin(ns, true);
+    prefs.clear();
+    prefs.end();
+}
